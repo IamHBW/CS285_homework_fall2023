@@ -32,8 +32,9 @@ def sample_trajectory(env, policy, max_path_length, render=False):
             image_obs.append(cv2.resize(img, dsize=(250, 250), interpolation=cv2.INTER_CUBIC))
     
         # TODO use the most recent ob to decide what to do
-        ac = ptu.to_numpy(policy(ob)) # HINT: this is a numpy array
-        ac = ac[0]
+        ac = policy.get_action(ob)
+        if len(ac.shape) > 1:
+            ac = ac[0]  # Remove batch dimension if present
 
         # TODO: take that action and get reward and next ob
         next_ob, rew, done, _ = env.step(ac)

@@ -116,6 +116,21 @@ class MLPPolicySL(BasePolicy, nn.Module, metaclass=abc.ABCMeta):
         """
         torch.save(self.state_dict(), filepath)
 
+    def get_action(self, obs):
+        """
+        Query the policy with observation(s) to get selected action(s)
+        
+        :param obs: observation(s) to query the policy
+        :return: sampled action(s) from the policy
+        """
+        if len(obs.shape) > 1:
+            observation = obs
+        else:
+            observation = obs[None, :]
+        observation = ptu.from_numpy(observation.astype(np.float32))
+        action = self(observation)
+        return ptu.to_numpy(action)
+
     def forward(self, observation: torch.FloatTensor) -> Any:
         """
         Defines the forward pass of the network
@@ -145,6 +160,7 @@ class MLPPolicySL(BasePolicy, nn.Module, metaclass=abc.ABCMeta):
             dict: 'Training Loss': supervised learning loss
         """
         # TODO: update the policy and return the loss
+        # print(type(observations))
         mean = self.mean_net(observations)
         std = self.logstd.exp()
         dis = distributions.Normal(mean,std)
