@@ -59,9 +59,13 @@ class MLPPolicy(nn.Module):
     def get_action(self, obs: np.ndarray) -> np.ndarray:
         """Takes a single observation (as a numpy array) and returns a single action (as a numpy array)."""
         # TODO: implement get_action
-        action = None
-
-        return action
+        if len(obs.shape) > 1:
+            observation = obs
+        else:
+            observation = obs[None, :]
+        observation = ptu.from_numpy(observation)
+        action = self(observation).sample()
+        return ptu.to_numpy(action)
 
     def forward(self, obs: torch.FloatTensor):
         """
@@ -71,11 +75,14 @@ class MLPPolicy(nn.Module):
         """
         if self.discrete:
             # TODO: define the forward pass for a policy with a discrete action space.
-            pass
+            logits = self.logits_net(obs)
+            actions = distributions.Categorical(logits=logits)
         else:
             # TODO: define the forward pass for a policy with a continuous action space.
-            pass
-        return None
+            mean = self.mean_net(obs)
+            std = self.logstd.exp()
+            actions = distributions.Normal(mean,std)
+        return actions
 
     def update(self, obs: np.ndarray, actions: np.ndarray, *args, **kwargs) -> dict:
         """Performs one iteration of gradient descent on the provided batch of data."""
@@ -92,12 +99,18 @@ class MLPPolicyPG(MLPPolicy):
         advantages: np.ndarray,
     ) -> dict:
         """Implements the policy gradient actor update."""
-        obs = ptu.from_numpy(obs)
-        actions = ptu.from_numpy(actions)
-        advantages = ptu.from_numpy(advantages)
+        #Are these shapes correct?
+        obs = ptu.from_numpy(obs) #(N,T,ob_dim)
+        actions = ptu.from_numpy(actions) #(N,T,ac_dim)
+        advantages = ptu.from_numpy(advantages)#(N,T)
 
         # TODO: implement the policy gradient actor update.
-        loss = None
+        actions_distribution = self(obs)
+        log_probs = actions_distribution.log_prob(actions)
+        loss = -(log_probs * advantages).sum(axis=1).mean()  ###To sum or not to sum??
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
 
         return {
             "Actor Loss": ptu.to_numpy(loss),
