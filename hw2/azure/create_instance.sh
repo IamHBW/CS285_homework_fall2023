@@ -3,11 +3,11 @@
 # 创建一个新的GPU实例，将代码传输到该实例，并运行一些安装步骤。
 
 export RESOURCE_GROUP="cs285-rg"
-export LOCATION="chinaeast2"
+export LOCATION="koreacentral"
 export INSTANCE_NAME="cs285-vm"
 export VM_SIZE="Standard_NC4as_T4_v3"
-# 使用Ubuntu 20.04 LTS with GPU支持
-export IMAGE="Canonical:0001-com-ubuntu-server-focal:20_04-lts-gen2:latest"
+# 使用Ubuntu 22.04 LTS with GPU支持
+export IMAGE="Ubuntu2204"
 export ADMIN_USERNAME=$(whoami)
 
 echo "正在创建资源组..."
@@ -46,7 +46,7 @@ PUBLIC_IP=$(az vm show -d -g $RESOURCE_GROUP -n $INSTANCE_NAME --query publicIps
 rsync -av --progress -e "ssh -o StrictHostKeyChecking=no" . ${ADMIN_USERNAME}@${PUBLIC_IP}:~/
 
 echo "-------------------------------------"
-echo "正在运行设置..."
+echo "正在安装驱动..."
 
 az vm run-command invoke -g $RESOURCE_GROUP -n $INSTANCE_NAME --command-id RunShellScript --scripts '
   # 安装NVIDIA驱动和CUDA
