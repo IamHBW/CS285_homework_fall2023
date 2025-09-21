@@ -57,7 +57,7 @@ class MLPPolicy(nn.Module):
 
     @torch.no_grad()
     def get_action(self, obs: np.ndarray) -> np.ndarray:
-        """Takes a single observation (as a numpy array) and returns a single action (as a numpy array)."""
+        """Takes a single observation (as a numpy array) and returns a single action (as a numpy array).If we use discrete actions,it returns scalar values"""
         # TODO: implement get_action
         if len(obs.shape) > 1:
             observation = obs
@@ -65,6 +65,8 @@ class MLPPolicy(nn.Module):
             observation = obs[None, :]
         observation = ptu.from_numpy(observation)
         action = self(observation).sample()
+        if self.discrete:
+            return ptu.to_numpy(action).item()
         return ptu.to_numpy(action)
 
     def forward(self, obs: torch.FloatTensor):
@@ -100,14 +102,20 @@ class MLPPolicyPG(MLPPolicy):
     ) -> dict:
         """Implements the policy gradient actor update."""
         #Are these shapes correct?
-        obs = ptu.from_numpy(obs) #(N,T,ob_dim)
-        actions = ptu.from_numpy(actions) #(N,T,ac_dim)
-        advantages = ptu.from_numpy(advantages)#(N,T)
+        obs = ptu.from_numpy(obs) #(batchsize,)
+        actions = ptu.from_numpy(actions) #(batchsize,)
+        advantages = ptu.from_numpy(advantages)#(batchsize,)
 
         # TODO: implement the policy gradient actor update.
         actions_distribution = self(obs)
         log_probs = actions_distribution.log_prob(actions)
-        loss = -(log_probs * advantages).sum(axis=1).mean()  ###To sum or not to sum??
+
+        # If the policy is continuous, the log_prob will be a tensor of shape (batch_size, ac_dim).
+        # We need to sum across the action dimensions to get a tensor of shape (batch_size,).
+        if len(log_probs.shape) > 1:
+            log_probs = log_probs.sum(axis=-1)
+
+        loss = -(log_probs * advantages).mean()
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
