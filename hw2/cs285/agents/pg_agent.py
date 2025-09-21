@@ -46,6 +46,11 @@ class PGAgent(nn.Module):
         self.use_reward_to_go = use_reward_to_go
         self.gae_lambda = gae_lambda
         self.normalize_advantages = normalize_advantages
+    
+    @torch.no_grad()
+    def get_action(self, obs: np.ndarray) -> np.ndarray:
+        """Takes a single observation (as a numpy array) and returns a single action (as a numpy array)."""
+        return self.actor.get_action(obs)
 
     def update(
         self,
@@ -67,12 +72,12 @@ class PGAgent(nn.Module):
         # TODO: flatten the lists of arrays into single arrays, so that the rest of the code can be written in a vectorized
         # way. obs, actions, rewards, terminals, and q_values should all be arrays with a leading dimension of `batch_size`
         # beyond this point.
-        #each has shape(batchsize,T)
-        obs = np.stack(obs,axis=0)   
-        actions = np.stack(actions,axis=0)
-        rewards = np.stack(rewards,axis=0)
-        q_values = np.stack(q_values,axis=0)
-        terminals = np.stack(terminals,axis=0)
+        #each has shape(batchsize,)
+        obs = np.concatenate(obs,axis=0)   
+        actions = np.concatenate(actions,axis=0)
+        rewards = np.concatenate(rewards,axis=0)
+        q_values = np.concatenate(q_values,axis=0)
+        terminals = np.concatenate(terminals,axis=0)
 
         # step 2: calculate advantages from Q values
         advantages: np.ndarray = self._estimate_advantage(
@@ -81,8 +86,7 @@ class PGAgent(nn.Module):
 
         # step 3: use all datapoints (s_t, a_t, adv_t) to update the PG actor/policy
         # TODO: update the PG actor/policy network once using the advantages
-        info: dict = None
-        self.actor.update(obs,actions,advantages)
+        info: dict = self.actor.update(obs,actions,advantages)
 
         # step 4: if needed, use all datapoints (s_t, a_t, q_t) to update the PG critic/baseline
         if self.critic is not None:
