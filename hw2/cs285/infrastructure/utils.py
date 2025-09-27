@@ -33,8 +33,9 @@ def sample_trajectory(
         
         ac: np.ndarray = policy.get_action(ob)
         # print(type(policy))
+        # print(ac.shape,env.action_space.shape)
         if not policy.discrete and len(ac.shape) > len(env.action_space.shape):
-            ac = ac.squeeze()
+            ac = ac.squeeze(-1)
         # TODO: use that action to take a step in the environment
         next_ob, rew, done, _ = env.step(ac)
 
