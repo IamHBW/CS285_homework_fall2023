@@ -35,7 +35,10 @@ def sample_trajectory(
         # print(type(policy))
         # print(ac.shape,env.action_space.shape)
         if not policy.discrete and len(ac.shape) > len(env.action_space.shape):
-            ac = ac.squeeze(-1)
+            if ac.shape[-1] == 1:
+                ac = ac.squeeze(-1)
+            elif ac.shape[0] == 1:
+                ac = ac.squeeze(0)
         # TODO: use that action to take a step in the environment
         next_ob, rew, done, _ = env.step(ac)
 
