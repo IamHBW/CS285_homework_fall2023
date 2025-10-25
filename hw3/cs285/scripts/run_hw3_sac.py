@@ -22,6 +22,7 @@ from cs285.infrastructure.logger import Logger
 from cs285.scripts.scripting_utils import make_logger, make_config
 
 import argparse
+import torch.profiler
 
 
 def run_training_loop(config: dict, logger: Logger, args: argparse.Namespace):
@@ -63,85 +64,95 @@ def run_training_loop(config: dict, logger: Logger, args: argparse.Namespace):
 
     observation = env.reset()
 
-    for step in tqdm.trange(config["total_steps"], dynamic_ncols=True):
-        if step < config["random_steps"]:
-            action = env.action_space.sample()
-        else:
-            # TODO(student): Select an action
-            action = agent.get_action(observation)
+    with torch.profiler.profile(
+        schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=2),
+        on_trace_ready=torch.profiler.tensorboard_trace_handler(
+            os.path.join(logger._log_dir, "profiler")
+        ),
+        record_shapes=True,
+        with_stack=True,
+    ) as prof:
+        for step in tqdm.trange(config["total_steps"], dynamic_ncols=True):
+            if step < config["random_steps"]:
+                action = env.action_space.sample()
+            else:
+                # TODO(student): Select an action
+                action = agent.get_action(observation)
 
-        # Step the environment and add the data to the replay buffer
-        next_observation, reward, done, info = env.step(action)
-        replay_buffer.insert(
-            observation=observation,
-            action=action,
-            reward=reward,
-            next_observation=next_observation,
-            done=done and not info.get("TimeLimit.truncated", False),
-        )
-
-        if done:
-            logger.log_scalar(info["episode"]["r"], "train_return", step)
-            logger.log_scalar(info["episode"]["l"], "train_ep_len", step)
-            observation = env.reset()
-        else:
-            observation = next_observation
-
-        # Train the agent
-        if step >= config["training_starts"]:
-            # TODO(student): Sample a batch of config["batch_size"] transitions from the replay buffer
-            batch = replay_buffer.sample(config["batch_size"])
-            batch = ptu.from_numpy(batch)
-            update_info = agent.update(**batch,step=step)
-
-            # Logging
-            update_info["actor_lr"] = agent.actor_lr_scheduler.get_last_lr()[0]
-            update_info["critic_lr"] = agent.critic_lr_scheduler.get_last_lr()[0]
-
-            if step % args.log_interval == 0:
-                for k, v in update_info.items():
-                    logger.log_scalar(v, k, step)
-                    logger.log_scalars
-                logger.flush()
-
-        # Run evaluation
-        if step % args.eval_interval == 0:
-            trajectories = utils.sample_n_trajectories(
-                eval_env,
-                policy=agent,
-                ntraj=args.num_eval_trajectories,
-                max_length=ep_len,
+            # Step the environment and add the data to the replay buffer
+            next_observation, reward, done, info = env.step(action)
+            replay_buffer.insert(
+                observation=observation,
+                action=action,
+                reward=reward,
+                next_observation=next_observation,
+                done=done and not info.get("TimeLimit.truncated", False),
             )
-            returns = [t["episode_statistics"]["r"] for t in trajectories]
-            ep_lens = [t["episode_statistics"]["l"] for t in trajectories]
 
-            logger.log_scalar(np.mean(returns), "eval_return", step)
-            logger.log_scalar(np.mean(ep_lens), "eval_ep_len", step)
+            if done:
+                logger.log_scalar(info["episode"]["r"], "train_return", step)
+                logger.log_scalar(info["episode"]["l"], "train_ep_len", step)
+                observation = env.reset()
+            else:
+                observation = next_observation
 
-            if len(returns) > 1:
-                logger.log_scalar(np.std(returns), "eval/return_std", step)
-                logger.log_scalar(np.max(returns), "eval/return_max", step)
-                logger.log_scalar(np.min(returns), "eval/return_min", step)
-                logger.log_scalar(np.std(ep_lens), "eval/ep_len_std", step)
-                logger.log_scalar(np.max(ep_lens), "eval/ep_len_max", step)
-                logger.log_scalar(np.min(ep_lens), "eval/ep_len_min", step)
+            # Train the agent
+            if step >= config["training_starts"]:
+                # TODO(student): Sample a batch of config["batch_size"] transitions from the replay buffer
+                batch = replay_buffer.sample(config["batch_size"])
+                batch = ptu.from_numpy(batch)
+                update_info = agent.update(**batch,step=step)
 
-            if args.num_render_trajectories > 0:
-                video_trajectories = utils.sample_n_trajectories(
-                    render_env,
-                    agent,
-                    args.num_render_trajectories,
-                    ep_len,
-                    render=True,
+                # Logging
+                update_info["actor_lr"] = agent.actor_lr_scheduler.get_last_lr()[0]
+                update_info["critic_lr"] = agent.critic_lr_scheduler.get_last_lr()[0]
+
+                if step % args.log_interval == 0:
+                    for k, v in update_info.items():
+                        logger.log_scalar(v, k, step)
+                        logger.log_scalars
+                    logger.flush()
+
+            # Run evaluation
+            if step % args.eval_interval == 0:
+                trajectories = utils.sample_n_trajectories(
+                    eval_env,
+                    policy=agent,
+                    ntraj=args.num_eval_trajectories,
+                    max_length=ep_len,
                 )
+                returns = [t["episode_statistics"]["r"] for t in trajectories]
+                ep_lens = [t["episode_statistics"]["l"] for t in trajectories]
 
-                logger.log_paths_as_videos(
-                    video_trajectories,
-                    step,
-                    fps=fps,
-                    max_videos_to_save=args.num_render_trajectories,
-                    video_title="eval_rollouts",
-                )
+                logger.log_scalar(np.mean(returns), "eval_return", step)
+                logger.log_scalar(np.mean(ep_lens), "eval_ep_len", step)
+
+                if len(returns) > 1:
+                    logger.log_scalar(np.std(returns), "eval/return_std", step)
+                    logger.log_scalar(np.max(returns), "eval/return_max", step)
+                    logger.log_scalar(np.min(returns), "eval/return_min", step)
+                    logger.log_scalar(np.std(ep_lens), "eval/ep_len_std", step)
+                    logger.log_scalar(np.max(ep_lens), "eval/ep_len_max", step)
+                    logger.log_scalar(np.min(ep_lens), "eval/ep_len_min", step)
+
+                if args.num_render_trajectories > 0:
+                    video_trajectories = utils.sample_n_trajectories(
+                        render_env,
+                        agent,
+                        args.num_render_trajectories,
+                        ep_len,
+                        render=True,
+                    )
+
+                    logger.log_paths_as_videos(
+                        video_trajectories,
+                        step,
+                        fps=fps,
+                        max_videos_to_save=args.num_render_trajectories,
+                        video_title="eval_rollouts",
+                    )
+            
+            prof.step()
 
 
 def main():
