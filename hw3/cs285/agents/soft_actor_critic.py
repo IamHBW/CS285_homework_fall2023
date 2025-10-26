@@ -274,7 +274,7 @@ class SoftActorCritic(nn.Module):
         # Do REINFORCE: calculate log-probs and use the Q-values
         # TODO(student)
         log_probs = action_distribution.log_prob(action)
-        loss = log_probs * advantage
+        loss = -(log_probs * advantage).mean()
 
         return loss, torch.mean(self.entropy(action_distribution))
 
@@ -286,13 +286,13 @@ class SoftActorCritic(nn.Module):
 
         # TODO(student): Sample actions
         # Note: Think about whether to use .rsample() or .sample() here...
-        action = ...
+        action = action_distribution.rsample()
 
         # TODO(student): Compute Q-values for the sampled state-action pair
-        q_values = ...
+        q_values = self.critic(obs,action)
 
         # TODO(student): Compute the actor loss
-        loss = ...
+        loss = -q_values.mean()
 
         return loss, torch.mean(self.entropy(action_distribution))
 
@@ -308,9 +308,8 @@ class SoftActorCritic(nn.Module):
 
         # Add entropy if necessary
         if self.use_entropy_bonus:
-            # loss -= self.temperature * entropy
-            loss = -self.temperature * entropy
-
+            loss -= self.temperature * entropy
+        
         self.actor_optimizer.zero_grad()
         loss.backward()
         self.actor_optimizer.step()
