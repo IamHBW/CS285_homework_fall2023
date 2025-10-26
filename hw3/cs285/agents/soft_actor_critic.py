@@ -150,9 +150,9 @@ class SoftActorCritic(nn.Module):
         # TODO(student): Implement the different backup strategies.
         # print(self.target_critic_backup_type)
         if self.target_critic_backup_type == "doubleq":
-            raise NotImplementedError
+            next_qs = next_qs.flip(dims=[0])
         elif self.target_critic_backup_type == "min":
-            raise NotImplementedError
+            next_qs = next_qs.amin(dim=0)
         elif self.target_critic_backup_type == "mean":
             next_qs = next_qs.mean(dim=0)
         else:
