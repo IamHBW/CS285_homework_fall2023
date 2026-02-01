@@ -89,7 +89,12 @@ class ModelBasedAgent(nn.Module):
         # directly
         # HINT 3: make sure to avoid any risk of dividing by zero when
         # normalizing vectors by adding a small number to the denominator!
-        loss = ...
+        self.update_statistics(obs,acs,next_obs)
+        obs_acs = torch.cat([obs,acs],dim=1)
+        obs_delta = next_obs - obs
+        obs_acs_normalized = (obs_acs - self.obs_acs_mean) / self.obs_acs_std
+        obs_delta_normalized = (obs_delta - self.obs_delta_mean) / self.obs_delta_std
+        loss = self.loss_fn(self.dynamics_models[i](obs_acs_normalized),obs_delta_normalized)
 
         self.optimizer.zero_grad()
         loss.backward()
@@ -111,10 +116,12 @@ class ModelBasedAgent(nn.Module):
         acs = ptu.from_numpy(acs)
         next_obs = ptu.from_numpy(next_obs)
         # TODO(student): update the statistics
-        self.obs_acs_mean = ...
-        self.obs_acs_std = ...
-        self.obs_delta_mean = ...
-        self.obs_delta_std = ...
+        obs_acs = torch.cat([obs,acs],dim=1)
+        obs_delta = next_obs - obs
+        self.obs_acs_mean = obs_acs.mean(0)
+        self.obs_acs_std = obs_acs.std(dim=0) + 1e-8
+        self.obs_delta_mean = obs_delta.mean(0)
+        self.obs_delta_std = obs_delta.std(0) + 1e-8
 
     @torch.no_grad()
     def get_dynamics_predictions(
