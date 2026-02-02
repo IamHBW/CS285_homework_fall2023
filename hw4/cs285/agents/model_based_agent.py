@@ -89,7 +89,6 @@ class ModelBasedAgent(nn.Module):
         # directly
         # HINT 3: make sure to avoid any risk of dividing by zero when
         # normalizing vectors by adding a small number to the denominator!
-        self.update_statistics(obs,acs,next_obs)
         obs_acs = torch.cat([obs,acs],dim=1)
         obs_delta = next_obs - obs
         obs_acs_normalized = (obs_acs - self.obs_acs_mean) / self.obs_acs_std
@@ -195,8 +194,9 @@ class ModelBasedAgent(nn.Module):
             # respectively, and returns a tuple of `(rewards, dones)`. You can 
             # ignore `dones`. You might want to do some reshaping to make
             # `next_obs` and `acs` 2-dimensional.
-            rewards , _ = self.env.get_reward(next_obs.reshape(-1,self.ob_dim),acs)
-            rewards = rewards.reshape(self.ensemble_size,self.mpc_num_action_sequences)
+            acs_repeated = np.tile(acs, (self.ensemble_size, 1))
+            rewards, _ = self.env.get_reward(next_obs.reshape(-1, self.ob_dim), acs_repeated)
+            rewards = rewards.reshape(self.ensemble_size, self.mpc_num_action_sequences)
             assert rewards.shape == (self.ensemble_size, self.mpc_num_action_sequences)
 
             sum_of_rewards += rewards
@@ -233,13 +233,17 @@ class ModelBasedAgent(nn.Module):
                 # HINT: you need a special case for i == 0 to initialize
                 # the elite mean and std
                 rewards = self.evaluate_action_sequences(obs,action_sequences)
-                best_k_indexes = np.argpartition(rewards,-self.cem_num_elites)[-self.cem_num_elites]
+                best_k_indexes = np.argpartition(rewards,-self.cem_num_elites)[-self.cem_num_elites:]
                 if i == 0:
                     elite_mean = action_sequences[best_k_indexes].mean(axis=0)
-                    elite_std = action_sequences[best_k_indexes].std(axis=0)
+                    elite_std = action_sequences[best_k_indexes].std(axis=0) + 1e-8
                 else:
-                    elite_mean += self.cem_alpha * action_sequences[best_k_indexes].mean(axis=0)
-                    elite_std += self.cem_alpha * action_sequences[best_k_indexes].std(axis=0)
+                    elite_mean = self.cem_alpha * action_sequences[best_k_indexes].mean(axis=0) + (1 - self.cem_alpha) * elite_mean
+                    elite_std = self.cem_alpha * action_sequences[best_k_indexes].std(axis=0) + (1 - self.cem_alpha) * elite_std
                 action_sequences = np.random.normal(elite_mean,elite_std,size=(self.mpc_num_action_sequences,self.mpc_horizon,self.ac_dim)).clip(self.env.action_space.low,self.env.action_space.high)
+            # Evaluate the final batch and return the best action
+            rewards = self.evaluate_action_sequences(obs, action_sequences)
+            best_index = np.argmax(rewards)
+            return action_sequences[best_index][0]
         else:
             raise ValueError(f"Invalid MPC strategy '{self.mpc_strategy}'")
