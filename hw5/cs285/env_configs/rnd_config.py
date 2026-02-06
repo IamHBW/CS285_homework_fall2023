@@ -11,10 +11,14 @@ def rnd_config(
     rnd_network_learning_rate: float = 1e-3,
     total_steps: int = 50000,
     discount: float = 0.95,
+    num_exploration_steps: int = 10000 ,
+    rnd_alpha: float = 0.01,
     **kwargs,
 ):
     config = basic_dqn_config(total_steps=total_steps, discount=discount, **kwargs)
     config["agent_kwargs"]["rnd_weight"] = rnd_weight
+    config["agent_kwargs"]["num_exploration_steps"] = num_exploration_steps
+    config["agent_kwargs"]["rnd_alpha"] = rnd_alpha
     config["log_name"] = "{env_name}_rnd{rnd_weight}".format(
         env_name=config["env_name"], rnd_weight=rnd_weight
     )
@@ -35,5 +39,7 @@ def rnd_config(
     config["agent_kwargs"][
         "make_rnd_network_optimizer"
     ] = lambda params: torch.optim.Adam(params, lr=rnd_network_learning_rate)
+
+    config["agent_kwargs"]["rnd_dim"] = rnd_dim
 
     return config
