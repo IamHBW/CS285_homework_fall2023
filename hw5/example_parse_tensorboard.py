@@ -1,5 +1,5 @@
 from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
-from tensorboardX import SummaryWriter
+from torch.utils.tensorboard.writer import SummaryWriter
 import os
 from PIL import Image
 from io import BytesIO

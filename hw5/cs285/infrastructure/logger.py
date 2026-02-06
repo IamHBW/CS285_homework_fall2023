@@ -1,5 +1,5 @@
 import os
-from tensorboardX import SummaryWriter
+from torch.utils.tensorboard.writer import SummaryWriter
 import numpy as np
 
 class Logger:
