@@ -42,6 +42,10 @@ class CQLAgent(DQNAgent):
 
         # TODO(student): modify the loss to implement CQL
         # Hint: `variables` includes qa_values and q_values from your CQL implementation
-        loss = loss + ...
+        qa_values = variables["qa_values"]
+        q_values = variables["q_values"]
+        q_softmax = (qa_values / self.cql_temperature).exp().sum(dim=-1).log() * self.cql_temperature
+        cql_regularizer = (q_softmax - q_values).mean(dim=0)
+        loss = loss + self.cql_alpha * cql_regularizer
 
         return loss, metrics, variables
