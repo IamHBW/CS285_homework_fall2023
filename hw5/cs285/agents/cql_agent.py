@@ -44,7 +44,9 @@ class CQLAgent(DQNAgent):
         # Hint: `variables` includes qa_values and q_values from your CQL implementation
         qa_values = variables["qa_values"]
         q_values = variables["q_values"]
-        q_softmax = (qa_values / self.cql_temperature).exp().sum(dim=-1).log() * self.cql_temperature
+        
+        # Use simple mean for stability
+        q_softmax = torch.logsumexp(qa_values / self.cql_temperature, dim=1) * self.cql_temperature
         cql_regularizer = (q_softmax - q_values).mean(dim=0)
         loss = loss + self.cql_alpha * cql_regularizer
 
