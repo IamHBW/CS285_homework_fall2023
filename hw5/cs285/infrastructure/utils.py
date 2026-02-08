@@ -16,7 +16,7 @@ def sample_trajectory(
 ) -> Dict[str, np.ndarray]:
     """Sample a rollout in the environment from a policy."""
     ob = env.reset()
-    obs, acs, rewards, next_obs, terminals, image_obs = [], [], [], [], [], []
+    obs, acs, rewards, next_obs, terminals, truncateds, image_obs = [], [], [], [], [], [], []
     steps = 0
 
     while True:
@@ -42,14 +42,17 @@ def sample_trajectory(
 
         # TODO rollout can end due to done, or due to max_length
         steps += 1
-        rollout_done = done or steps > max_length  # HINT: this is either 0 or 1
+        truncated = info.get("TimeLimit.truncated", False) or steps >= max_length
+        terminal = done and not truncated
+        rollout_done = done or truncated  # HINT: this is either 0 or 1
 
         # record result of taking that action
         obs.append(ob)
         acs.append(ac)
         rewards.append(rew)
         next_obs.append(next_ob)
-        terminals.append(rollout_done)
+        terminals.append(terminal)
+        truncateds.append(truncated)
 
         ob = next_ob  # jump to next timestep
 
@@ -70,6 +73,7 @@ def sample_trajectory(
         "action": np.array(acs, dtype=np.float32),
         "next_observation": np.array(next_obs, dtype=np.float32),
         "terminal": np.array(terminals, dtype=np.float32),
+        "truncated": np.array(truncateds, dtype=np.float32),
         "episode_statistics": episode_statistics,
     }
 

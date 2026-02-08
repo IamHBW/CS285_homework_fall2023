@@ -98,12 +98,14 @@ def run_training_loop(config: dict, logger: Logger, args: argparse.Namespace):
             observation=observation,
             action=action,
             reward=reward,
-            done=done and not truncated,
             next_observation=next_observation,
+            done=done,
+            truncated=truncated,
         )
         recent_observations.append(observation)
 
         # Handle episode termination
+        done = done or truncated
         if done:
             observation = env.reset()
 
@@ -124,6 +126,7 @@ def run_training_loop(config: dict, logger: Logger, args: argparse.Namespace):
             batch["rewards"] * (1 if config.get("use_reward", False) else 0),
             batch["next_observations"],
             batch["dones"],
+            batch["is_truncated"],
             step,
         )
 

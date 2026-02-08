@@ -62,6 +62,7 @@ class DQNAgent(nn.Module):
         reward: torch.Tensor,
         next_obs: torch.Tensor,
         done: torch.Tensor,
+        is_truncated: torch.Tensor,
     ) -> Tuple[torch.Tensor, dict, dict]:
         """
         Compute the loss for the DQN critic.
@@ -84,7 +85,9 @@ class DQNAgent(nn.Module):
             
             reward = reward.unsqueeze(-1)
             next_q_values = torch.gather(next_qa_values,-1,next_action.unsqueeze(-1))
-            next_q_values = next_q_values * (1 - done.unsqueeze(-1).float())
+            terminal = done.float() * (1 - is_truncated.float())
+            bootstrap = 1 - terminal
+            next_q_values = next_q_values * bootstrap.unsqueeze(-1)
             next_q_values = next_q_values.squeeze(dim=-1)
             assert next_q_values.shape == (batch_size,), next_q_values.shape
 
@@ -115,9 +118,12 @@ class DQNAgent(nn.Module):
         reward: torch.Tensor,
         next_obs: torch.Tensor,
         done: torch.Tensor,
+        is_truncated: torch.Tensor,
     ) -> dict:
         """Update the DQN critic, and return stats for logging."""
-        loss, metrics, _ = self.compute_critic_loss(obs, action, reward, next_obs, done)
+        loss, metrics, _ = self.compute_critic_loss(
+            obs, action, reward, next_obs, done, is_truncated
+        )
 
         self.critic_optimizer.zero_grad()
         loss.backward()
@@ -141,13 +147,16 @@ class DQNAgent(nn.Module):
         reward: torch.Tensor,
         next_obs: torch.Tensor,
         done: torch.Tensor,
+        is_truncated: torch.Tensor,
         step: int,
     ) -> dict:
         """
         Update the DQN agent, including both the critic and target.
         """
         # TODO(student): paste in your code from HW3
-        critic_stats = self.update_critic(obs,action,reward,next_obs,done)
+        critic_stats = self.update_critic(
+            obs, action, reward, next_obs, done, is_truncated
+        )
         if step % self.target_update_period == 0:
             self.update_target_critic()
         return critic_stats

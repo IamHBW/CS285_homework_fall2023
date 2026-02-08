@@ -89,6 +89,7 @@ class RNDAgent(DQNAgent):
         rewards: torch.Tensor,
         next_observations: torch.Tensor,
         dones: torch.Tensor,
+        is_truncated: torch.Tensor,
         step: int,
     ):
         with torch.no_grad():
@@ -104,13 +105,30 @@ class RNDAgent(DQNAgent):
             assert rnd_error.shape == rewards.shape
             rewards = rewards + self.rnd_weight * rnd_error
 
-        metrics = super().update(observations, actions, rewards, next_observations, dones, step)
+        metrics = super().update(
+            observations,
+            actions,
+            rewards,
+            next_observations,
+            dones,
+            is_truncated,
+            step,
+        )
 
         # Update the RND network.
         rnd_loss = self.update_rnd(observations)
         metrics["rnd_loss"] = rnd_loss
 
-        metrics.update(self.update_exploration_critic(observations, actions, rnd_error,next_observations,dones))
+        metrics.update(
+            self.update_exploration_critic(
+                observations,
+                actions,
+                rnd_error,
+                next_observations,
+                dones,
+                is_truncated,
+            )
+        )
 
         if step % self.target_update_period == 0:
             self.update_exploration_target_critic()
@@ -143,10 +161,13 @@ class RNDAgent(DQNAgent):
         action: torch.Tensor,
         rnd_error: torch.Tensor,
         next_obs: torch.Tensor,
-        done: torch.Tensor        
+        done: torch.Tensor,
+        is_truncated: torch.Tensor,
     ) -> dict:
         """Update the exploration critic, and return stats for logging."""
-        loss, metrics, _ = self.compute_exploration_critic_loss(obs, action, rnd_error, next_obs, done)
+        loss, metrics, _ = self.compute_exploration_critic_loss(
+            obs, action, rnd_error, next_obs, done, is_truncated
+        )
         
         self.exploration_critic_optimizer.zero_grad()
         loss.backward()
@@ -167,6 +188,7 @@ class RNDAgent(DQNAgent):
         reward: torch.Tensor,
         next_obs: torch.Tensor,
         done: torch.Tensor,
+        is_truncated: torch.Tensor,
     ) -> Tuple[torch.Tensor, dict, dict]:
         """
         Compute the loss for the exploration critic.
@@ -185,7 +207,9 @@ class RNDAgent(DQNAgent):
             
             reward = reward.unsqueeze(-1)
             next_q_values = torch.gather(next_qa_values,-1,next_action.unsqueeze(-1))
-            next_q_values = next_q_values * (1 - done.unsqueeze(-1).float())
+            terminal = done.float() * (1 - is_truncated.float())
+            bootstrap = 1 - terminal
+            next_q_values = next_q_values * bootstrap.unsqueeze(-1)
             next_q_values = next_q_values.squeeze(dim=-1)
             assert next_q_values.shape == (batch_size,), next_q_values.shape
 

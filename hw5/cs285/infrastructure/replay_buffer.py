@@ -1,3 +1,4 @@
+from typing import Optional
 from cs285.infrastructure.utils import *
 
 
@@ -10,15 +11,19 @@ class ReplayBuffer:
         self.rewards = None
         self.next_observations = None
         self.dones = None
+        self.is_truncated = None
 
     def sample(self, batch_size):
         rand_indices = np.random.randint(0, self.size, size=(batch_size,)) % self.max_size
+        if not hasattr(self, "is_truncated") or self.is_truncated is None:
+            self.is_truncated = np.zeros_like(self.dones)
         return {
             "observations": self.observations[rand_indices],
             "actions": self.actions[rand_indices],
             "rewards": self.rewards[rand_indices],
             "next_observations": self.next_observations[rand_indices],
             "dones": self.dones[rand_indices],
+            "is_truncated": self.is_truncated[rand_indices],
         }
 
     def __len__(self):
@@ -32,6 +37,7 @@ class ReplayBuffer:
         reward: np.ndarray,
         next_observation: np.ndarray,
         done: np.ndarray,
+        truncated: Optional[np.ndarray] = None,
     ):
         """
         Insert a single transition into the replay buffer.
@@ -49,6 +55,10 @@ class ReplayBuffer:
             reward = np.array(reward)
         if isinstance(done, bool):
             done = np.array(done)
+        if truncated is None:
+            truncated = False
+        if isinstance(truncated, bool):
+            truncated = np.array(truncated)
         if isinstance(action, int):
             action = np.array(action, dtype=np.int64)
 
@@ -62,18 +72,23 @@ class ReplayBuffer:
                 (self.max_size, *next_observation.shape), dtype=next_observation.dtype
             )
             self.dones = np.empty((self.max_size, *done.shape), dtype=done.dtype)
+            self.is_truncated = np.empty(
+                (self.max_size, *truncated.shape), dtype=truncated.dtype
+            )
 
         assert observation.shape == self.observations.shape[1:]
         assert action.shape == self.actions.shape[1:]
         assert reward.shape == ()
         assert next_observation.shape == self.next_observations.shape[1:]
         assert done.shape == ()
+        assert truncated.shape == ()
 
         self.observations[self.size % self.max_size] = observation
         self.actions[self.size % self.max_size] = action
         self.rewards[self.size % self.max_size] = reward
         self.next_observations[self.size % self.max_size] = next_observation
         self.dones[self.size % self.max_size] = done
+        self.is_truncated[self.size % self.max_size] = truncated
 
         self.size += 1
 
@@ -97,6 +112,7 @@ class MemoryEfficientReplayBuffer:
         self.actions = None
         self.rewards = None
         self.dones = None
+        self.is_truncated = None
 
         self.observation_framebuffer_idcs = None
         self.next_observation_framebuffer_idcs = None
@@ -114,6 +130,9 @@ class MemoryEfficientReplayBuffer:
             np.random.randint(0, self.size, size=(batch_size,)) % self.max_size
         )
 
+        if not hasattr(self, "is_truncated") or self.is_truncated is None:
+            self.is_truncated = np.zeros_like(self.dones)
+
         observation_framebuffer_idcs = (
             self.observation_framebuffer_idcs[rand_indices] % self.max_framebuffer_size
         )
@@ -128,6 +147,7 @@ class MemoryEfficientReplayBuffer:
             "rewards": self.rewards[rand_indices],
             "next_observations": self.framebuffer[next_observation_framebuffer_idcs],
             "dones": self.dones[rand_indices],
+            "is_truncated": self.is_truncated[rand_indices],
         }
 
     def __len__(self):
@@ -213,6 +233,7 @@ class MemoryEfficientReplayBuffer:
         reward: np.ndarray,
         next_observation: np.ndarray,
         done: np.ndarray,
+        truncated: Optional[np.ndarray] = None,
     ):
         """
         Insert a single transition into the replay buffer.
@@ -230,6 +251,10 @@ class MemoryEfficientReplayBuffer:
             reward = np.array(reward)
         if isinstance(done, bool):
             done = np.array(done)
+        if truncated is None:
+            truncated = False
+        if isinstance(truncated, bool):
+            truncated = np.array(truncated)
         if isinstance(action, int):
             action = np.array(action, dtype=np.int64)
 
@@ -242,11 +267,15 @@ class MemoryEfficientReplayBuffer:
             self.actions = np.empty((self.max_size, *action.shape), dtype=action.dtype)
             self.rewards = np.empty((self.max_size, *reward.shape), dtype=reward.dtype)
             self.dones = np.empty((self.max_size, *done.shape), dtype=done.dtype)
+            self.is_truncated = np.empty(
+                (self.max_size, *truncated.shape), dtype=truncated.dtype
+            )
 
         assert action.shape == self.actions.shape[1:]
         assert reward.shape == ()
         assert next_observation.shape == self.observation_shape
         assert done.shape == ()
+        assert truncated.shape == ()
 
         self.observation_framebuffer_idcs[
             self.size % self.max_size
@@ -254,6 +283,7 @@ class MemoryEfficientReplayBuffer:
         self.actions[self.size % self.max_size] = action
         self.rewards[self.size % self.max_size] = reward
         self.dones[self.size % self.max_size] = done
+        self.is_truncated[self.size % self.max_size] = truncated
 
         next_frame_idx = self._insert_frame(next_observation)
 

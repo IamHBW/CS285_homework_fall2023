@@ -58,12 +58,16 @@ def run_training_loop(config: dict, logger: Logger, args: argparse.Namespace):
             k: ptu.from_numpy(v) if isinstance(v, np.ndarray) else v for k, v in batch.items()
         }
 
+        if "is_truncated" not in batch:
+            batch["is_truncated"] = torch.zeros_like(batch["dones"])
+
         metrics = agent.update(
             batch["observations"],
             batch["actions"],
             batch["rewards"],
             batch["next_observations"],
             batch["dones"],
+            batch["is_truncated"],
             step,
         )
 

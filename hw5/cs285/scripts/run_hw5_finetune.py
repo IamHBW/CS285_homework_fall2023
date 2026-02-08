@@ -85,12 +85,16 @@ def run_training_loop(config: dict, logger: Logger, args: argparse.Namespace):
             # Convert to PyTorch tensors
         batch = ptu.from_numpy(batch)
 
+        if "is_truncated" not in batch:
+            batch["is_truncated"] = torch.zeros_like(batch["dones"])
+
         update_info = agent.update(
                 batch["observations"],
                 batch["actions"],
                 batch["rewards"] * (1 if config.get("use_reward", False) else 0),
                 batch["next_observations"],
                 batch["dones"],
+            batch["is_truncated"],
                 step,
             )
 
@@ -110,10 +114,17 @@ def run_training_loop(config: dict, logger: Logger, args: argparse.Namespace):
             if isinstance(replay_buffer, MemoryEfficientReplayBuffer):
                 # We're using the memory-efficient replay buffer,
                 # so we only insert next_observation (not observation)
-                replay_buffer.insert(action,reward,next_observation,done)
+                replay_buffer.insert(action, reward, next_observation, done, truncated)
             else:
                 # We're using the regular replay buffer
-                replay_buffer.insert(observation,action,reward,next_observation,done)
+                replay_buffer.insert(
+                    observation,
+                    action,
+                    reward,
+                    next_observation,
+                    done,
+                    truncated,
+                )
 
             done = done or truncated
             # Handle episode termination

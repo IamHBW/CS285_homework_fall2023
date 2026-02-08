@@ -29,6 +29,7 @@ class AWACAgent(DQNAgent):
         rewards: torch.Tensor,
         next_observations: torch.Tensor,
         dones: torch.Tensor,
+        is_truncated: torch.Tensor,
     ):
         batch_size = observations.shape[0]
         with torch.no_grad():
@@ -40,7 +41,9 @@ class AWACAgent(DQNAgent):
             next_probs = next_action_distribution.probs
             next_qs = (next_probs * next_qa_values).sum(dim=-1)
             assert dones.shape == (batch_size,), dones.shape
-            next_qs = next_qs * (1 - dones.float())
+            terminal = dones.float() * (1 - is_truncated.float())
+            bootstrap = 1 - terminal
+            next_qs = next_qs * bootstrap
             next_qs = next_qs.squeeze(dim=-1)
             assert next_qs.shape == (batch_size,), next_qs.shape
 
@@ -104,8 +107,25 @@ class AWACAgent(DQNAgent):
 
         return loss.item()
 
-    def update(self, observations: torch.Tensor, actions: torch.Tensor, rewards: torch.Tensor, next_observations: torch.Tensor, dones: torch.Tensor, step: int):
-        metrics = super().update(observations, actions, rewards, next_observations, dones, step)
+    def update(
+        self,
+        observations: torch.Tensor,
+        actions: torch.Tensor,
+        rewards: torch.Tensor,
+        next_observations: torch.Tensor,
+        dones: torch.Tensor,
+        is_truncated: torch.Tensor,
+        step: int,
+    ):
+        metrics = super().update(
+            observations,
+            actions,
+            rewards,
+            next_observations,
+            dones,
+            is_truncated,
+            step,
+        )
 
         # Update the actor.
         actor_loss = self.update_actor(observations, actions)

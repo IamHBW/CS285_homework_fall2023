@@ -30,7 +30,8 @@ class CQLAgent(DQNAgent):
         action: torch.Tensor,
         reward: torch.Tensor,
         next_obs: torch.Tensor,
-        done: bool,
+        done: torch.Tensor,
+        is_truncated: torch.Tensor,
     ) -> Tuple[torch.Tensor, dict, dict]:
         loss, metrics, variables = super().compute_critic_loss(
             obs,
@@ -38,6 +39,7 @@ class CQLAgent(DQNAgent):
             reward,
             next_obs,
             done,
+            is_truncated,
         )
 
         # TODO(student): modify the loss to implement CQL

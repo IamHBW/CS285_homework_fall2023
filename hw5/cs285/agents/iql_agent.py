@@ -52,6 +52,7 @@ class IQLAgent(AWACAgent):
         rewards: torch.Tensor,
         next_observations: torch.Tensor,
         dones: torch.Tensor,
+        is_truncated: torch.Tensor,
     ) -> dict:
         """
         Update Q(s, a)
@@ -60,7 +61,9 @@ class IQLAgent(AWACAgent):
         (batch_size,) = rewards.shape
         with torch.no_grad():
             target_vs = self.target_value_critic(next_observations)
-            target_vs = target_vs.squeeze(-1) * (1 - dones.float())
+            terminal = dones.float() * (1 - is_truncated.float())
+            bootstrap = 1 - terminal
+            target_vs = target_vs.squeeze(-1) * bootstrap
             assert target_vs.shape == (batch_size,), target_vs.shape
             target_values = rewards.squeeze(dim=-1) + self.discount * target_vs
             assert target_values.shape == (batch_size,), target_values.shape
@@ -135,12 +138,20 @@ class IQLAgent(AWACAgent):
         rewards: torch.Tensor,
         next_observations: torch.Tensor,
         dones: torch.Tensor,
+        is_truncated: torch.Tensor,
     ) -> dict:
         """
         Update both Q(s, a) and V(s)
         """
 
-        metrics_q = self.update_q(observations, actions, rewards, next_observations, dones)
+        metrics_q = self.update_q(
+            observations,
+            actions,
+            rewards,
+            next_observations,
+            dones,
+            is_truncated,
+        )
         metrics_v = self.update_v(observations, actions)
 
         return {**metrics_q, **metrics_v}
@@ -152,9 +163,17 @@ class IQLAgent(AWACAgent):
         rewards: torch.Tensor,
         next_observations: torch.Tensor,
         dones: torch.Tensor,
+        is_truncated: torch.Tensor,
         step: int,
     ):
-        metrics = self.update_critic(observations, actions, rewards, next_observations, dones)
+        metrics = self.update_critic(
+            observations,
+            actions,
+            rewards,
+            next_observations,
+            dones,
+            is_truncated,
+        )
         metrics["actor_loss"] = self.update_actor(observations, actions)
 
         if step % self.target_update_period == 0:
