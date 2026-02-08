@@ -180,6 +180,7 @@ def run_training_loop(config: dict, logger: Logger, args: argparse.Namespace):
     )
     fig.suptitle("State coverage")
     filename = os.path.join("exploration", f"{config['log_name']}.png")
+    os.makedirs(os.path.dirname(filename), exist_ok=True)
     fig.savefig(filename)
     print("Saved final heatmap to", filename)
 
@@ -199,7 +200,7 @@ def main():
     parser.add_argument("--config_file", "-cfg", type=str, required=True)
 
     parser.add_argument("--eval_interval", "-ei", type=int, default=10000)
-    parser.add_argument("--visualize_interval", "-vi", type=int, default=1000)
+    parser.add_argument("--visualize_interval", "-vi", type=int, default=10000)
     parser.add_argument("--num_eval_trajectories", "-neval", type=int, default=10)
 
     parser.add_argument("--seed", type=int, default=1)
