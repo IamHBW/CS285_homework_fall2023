@@ -133,3 +133,6 @@ data/
 
 #vscode
 .vscode/
+
+#copilot
+.github/
