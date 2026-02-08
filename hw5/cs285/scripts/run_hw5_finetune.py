@@ -16,7 +16,7 @@ import tqdm
 
 from cs285.infrastructure import utils
 from cs285.infrastructure.logger import Logger
-from cs285.infrastructure.replay_buffer import ReplayBuffer
+from cs285.infrastructure.replay_buffer import ReplayBuffer, MemoryEfficientReplayBuffer
 
 from scripting_utils import make_logger, make_config
 from run_hw5_explore import visualize
@@ -49,7 +49,9 @@ def run_training_loop(config: dict, logger: Logger, args: argparse.Namespace):
     observation = None
 
     # Replay buffer
-    replay_buffer = ReplayBuffer(capacity=config["total_steps"])
+    dataset_path = os.path.join(args.dataset_dir, f"{config['dataset_name']}.pkl")
+    with open(dataset_path, "rb") as f:
+        replay_buffer = pickle.load(f)
 
     observation = env.reset()
 
@@ -57,6 +59,22 @@ def run_training_loop(config: dict, logger: Logger, args: argparse.Namespace):
 
     num_offline_steps = config["offline_steps"]
     num_online_steps = config["total_steps"] - num_offline_steps
+    epsilon = None
+
+    def reset_env_training():
+        nonlocal observation
+
+        observation = env.reset()
+
+        assert not isinstance(
+            observation, tuple
+        ), "env.reset() must return np.ndarray - make sure your Gym version uses the old step API"
+        observation = np.asarray(observation)
+
+        if isinstance(replay_buffer, MemoryEfficientReplayBuffer):
+            replay_buffer.on_reset(observation=observation[-1, ...])
+
+    reset_env_training()
 
     for step in tqdm.trange(config["total_steps"], dynamic_ncols=True):
         # TODO(student): Borrow code from another online training script here. Only run the online training loop after `num_offline_steps` steps.
@@ -64,17 +82,48 @@ def run_training_loop(config: dict, logger: Logger, args: argparse.Namespace):
         # Main training loop
         batch = replay_buffer.sample(config["batch_size"])
 
-        # Convert to PyTorch tensors
+            # Convert to PyTorch tensors
         batch = ptu.from_numpy(batch)
 
         update_info = agent.update(
-            batch["observations"],
-            batch["actions"],
-            batch["rewards"] * (1 if config.get("use_reward", False) else 0),
-            batch["next_observations"],
-            batch["dones"],
-            step,
-        )
+                batch["observations"],
+                batch["actions"],
+                batch["rewards"] * (1 if config.get("use_reward", False) else 0),
+                batch["next_observations"],
+                batch["dones"],
+                step,
+            )
+
+        if step <= num_offline_steps:
+            pass
+        else:
+            epsilon = exploration_schedule.value(step)
+        
+            action = agent.get_action(observation,step,epsilon)
+            next_observation,reward,done,info = env.step(action)
+            recent_observations.append(observation)
+
+            next_observation = np.asarray(next_observation)
+            truncated = info.get("TimeLimit.truncated", False)
+
+
+            if isinstance(replay_buffer, MemoryEfficientReplayBuffer):
+                # We're using the memory-efficient replay buffer,
+                # so we only insert next_observation (not observation)
+                replay_buffer.insert(action,reward,next_observation,done)
+            else:
+                # We're using the regular replay buffer
+                replay_buffer.insert(observation,action,reward,next_observation,done)
+
+            done = done or truncated
+            # Handle episode termination
+            if done:
+                reset_env_training()
+
+                logger.log_scalar(info["episode"]["r"], "train_return", step)
+                logger.log_scalar(info["episode"]["l"], "train_ep_len", step)
+            else:
+                observation = next_observation
 
         # Logging code
         if epsilon is not None:
@@ -109,17 +158,18 @@ def run_training_loop(config: dict, logger: Logger, args: argparse.Namespace):
 
         if step % args.visualize_interval == 0:
             env_pointmass: Pointmass = env.unwrapped
-            observations = np.stack(recent_observations)
-            recent_observations = []
-            logger.log_figure(
-                visualize(env_pointmass, agent, observations),
-                "exploration_trajectories",
-                step,
-                "eval",
-            )
+            if len(recent_observations) > 0:
+                observations = np.stack(recent_observations)
+                recent_observations = []
+                logger.log_figure(
+                    visualize(env_pointmass, agent, observations),
+                    "exploration_trajectories",
+                    step,
+                    "eval",
+                )
 
     # Save the final dataset
-    dataset_file = os.path.join(args.dataset_dir, f"{config['dataset_name']}.pkl")
+    dataset_file = os.path.join(args.dataset_dir, f"{config['dataset_name']}_finetuned.pkl")
     with open(dataset_file, "wb") as f:
         pickle.dump(replay_buffer, f)
         print("Saved dataset to", dataset_file)
