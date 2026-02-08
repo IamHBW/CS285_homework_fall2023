@@ -415,7 +415,9 @@ class Pointmass(gym.Env):
         self.state = self.simulate_step(self.state, action)
 
         dist = np.linalg.norm(self.state - self.fixed_goal)
-        done = (dist < self.epsilon) or (self.timesteps_left == 0)
+        is_success = dist < self.epsilon
+        is_timeout = (self.timesteps_left == 0) and not is_success
+        done = is_success or (self.timesteps_left == 0)
         ns = self._normalize_obs(self.state.copy())
 
         if self.dense_reward:
@@ -423,7 +425,10 @@ class Pointmass(gym.Env):
         else:
             reward = int(dist < self.epsilon) - 1
 
-        return ns, reward, done, {}
+        info = {
+            "TimeLimit.truncated": bool(is_timeout),
+        }
+        return ns, reward, done, info
 
     @property
     def walls(self):
